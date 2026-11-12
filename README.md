@@ -2,7 +2,7 @@
 
 Credit screen of 12 agribusiness and food companies using SEC financial statement data and MySQL.
 
-> **Status:** In progress. Data loaded and cleaned, peer group selected (Steps 1-4); ratio analysis next.
+> **Status:** In progress. Data loaded and cleaned, peer group selected, latest 10-K identified (Steps 1-5); ratio analysis next.
 
 ## Data source
 
@@ -27,6 +27,7 @@ Quarters used: **2025q4, 2026q1, 2026q2, 2026q3**. The raw files are excluded fr
 | `sql/02_load.sql` | Loads each quarter with `LOAD DATA LOCAL INFILE` and tags every row with `src_quarter` |
 | `sql/03_clean.sql` | Builds typed tables `sub` (10-K and 10-K/A filings only, real dates) and `num` (USD values, company-wide totals only, numbers as `DECIMAL(28,4)`), with indexes on the join keys |
 | `sql/04_peers.sql` | Finds candidate companies with a `REGEXP` name search, then hard-codes the verified 12-company peer group in `peers` (keyed by SEC CIK) |
+| `sql/05_latest.sql` | View `latest_10k`: each company's most recent 10-K, picked with `ROW_NUMBER() OVER (PARTITION BY cik ORDER BY period DESC, filed DESC)` |
 
 ## Peer group
 
@@ -46,6 +47,25 @@ Quarters used: **2025q4, 2026q1, 2026q2, 2026q3**. The raw files are excluded fr
 
 - **John Deere Capital Corp** (CIK 27673): Deere's captive finance subsidiary, which files its own 10-K. Including it would double-count Deere's financing debt.
 - **Mosaic ImmunoEngineering** (CIK 836564): an unrelated biotech company that shares the "Mosaic" name.
+
+### Latest annual report used
+
+All 12 companies have a 10-K in the loaded quarters. Fiscal year-ends differ, so the screen compares each company's most recent full fiscal year rather than one calendar date:
+
+| Ticker | Fiscal year ended | 10-K filed |
+|---|---|---|
+| ADM | 2025-12-31 | 2026-02-17 |
+| BG | 2025-12-31 | 2026-02-19 |
+| CAG | 2026-05-31 | 2026-07-15 |
+| CF | 2025-12-31 | 2026-02-25 |
+| CTVA | 2025-12-31 | 2026-02-12 |
+| DE | 2025-10-31 | 2025-12-18 |
+| GIS | 2026-05-31 | 2026-07-01 |
+| HRL | 2025-10-31 | 2025-12-05 |
+| INGR | 2025-12-31 | 2026-02-17 |
+| KHC | 2025-12-31 | 2026-02-12 |
+| MOS | 2025-12-31 | 2026-02-27 |
+| TSN | 2025-09-30 | 2025-11-10 |
 
 ## Load validation
 
