@@ -12,17 +12,3 @@ CREATE TABLE raw_num (
 	adsh VARCHAR(20), tag VARCHAR(256), version VARCHAR(20), ddate VARCHAR(8), qtrs VARCHAR(8), uom VARCHAR(40), 
     segments TEXT, coreg TEXT, value VARCHAR(40), footnote TEXT, src_quarter VARCHAR(6)
 );
-SHOW COLUMNS FROM raw_sub;
-ALTER TABLE raw_sub
-	RENAME COLUMN basl TO bas1,
-	RENAME COLUMN masl TO mas1;
-SHOW COLUMNS FROM raw_sub;
-ALTER TABLE raw_sub
-	RENAME COLUMN stprna TO stprba;
-SHOW COLUMNS FROM raw_sub;
-ALTER TABLE raw_sub
-	RENAME COLUMN fype TO fye;
-SHOW COLUMNS FROM raw_sub;
-ALTER TABLE raw_sub
-	RENAME COLUMN filled TO filed;
-SHOW COLUMNS FROM raw_sub;
