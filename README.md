@@ -2,7 +2,7 @@
 
 Credit screen of 12 agribusiness and food companies using SEC financial statement data and MySQL.
 
-> **Status:** In progress. Data loaded and cleaned (Steps 1-3); peer selection and ratio analysis next.
+> **Status:** In progress. Data loaded and cleaned, peer group selected (Steps 1-4); ratio analysis next.
 
 ## Data source
 
@@ -26,6 +26,26 @@ Quarters used: **2025q4, 2026q1, 2026q2, 2026q3**. The raw files are excluded fr
 | `sql/01_tables.sql` | Creates the raw landing tables `raw_sub` and `raw_num` (all text, so no value can break the load) |
 | `sql/02_load.sql` | Loads each quarter with `LOAD DATA LOCAL INFILE` and tags every row with `src_quarter` |
 | `sql/03_clean.sql` | Builds typed tables `sub` (10-K and 10-K/A filings only, real dates) and `num` (USD values, company-wide totals only, numbers as `DECIMAL(28,4)`), with indexes on the join keys |
+| `sql/04_peers.sql` | Finds candidate companies with a `REGEXP` name search, then hard-codes the verified 12-company peer group in `peers` (keyed by SEC CIK) |
+
+## Peer group
+
+12 U.S.-listed companies across the agribusiness and food value chain, from farm inputs to the grocery shelf:
+
+| Segment | Companies (ticker, SEC CIK) |
+|---|---|
+| Seeds & crop protection | Corteva (CTVA, 1755672) |
+| Fertilizer | CF Industries (CF, 1324404), Mosaic (MOS, 1285785) |
+| Ag equipment | Deere & Co (DE, 315189) |
+| Grain & processing | Archer-Daniels-Midland (ADM, 7084), Bunge Global (BG, 1996862) |
+| Food ingredients | Ingredion (INGR, 1046257) |
+| Protein | Tyson Foods (TSN, 100493), Hormel Foods (HRL, 48465) |
+| Packaged food | General Mills (GIS, 40704), Kraft Heinz (KHC, 1637459), Conagra Brands (CAG, 23217) |
+
+**How the peers were selected:** a name search on the 10-K filings returned 14 candidates, which were checked by hand and matched by CIK rather than name. Two false matches were excluded:
+
+- **John Deere Capital Corp** (CIK 27673): Deere's captive finance subsidiary, which files its own 10-K. Including it would double-count Deere's financing debt.
+- **Mosaic ImmunoEngineering** (CIK 836564): an unrelated biotech company that shares the "Mosaic" name.
 
 ## Load validation
 
@@ -55,6 +75,7 @@ After cleaning (`sql/03_clean.sql`):
 
 - **Validate every load against the source.** Comparing row counts with the files' line counts is what made the duplicate load easy to diagnose and confirm fixed.
 - **Let constraints catch errors.** The primary key on `sub` stopped duplicate data before it could double-count any figures in the ratios.
+- **Match entities by ID, not by name.** A name search is a starting point; the CIK is the reliable key. Two of the 14 name matches were the wrong companies.
 - **Make loads safe to rerun.** Running `LOAD DATA` twice appends a second copy. Delete a quarter's rows (by `src_quarter`) before reloading it.
 
 ## How to reproduce
