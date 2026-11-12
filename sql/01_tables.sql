@@ -17,3 +17,12 @@ ALTER TABLE raw_sub
 	RENAME COLUMN basl TO bas1,
 	RENAME COLUMN masl TO mas1;
 SHOW COLUMNS FROM raw_sub;
+ALTER TABLE raw_sub
+	RENAME COLUMN stprna TO stprba;
+SHOW COLUMNS FROM raw_sub;
+ALTER TABLE raw_sub
+	RENAME COLUMN fype TO fye;
+SHOW COLUMNS FROM raw_sub;
+ALTER TABLE raw_sub
+	RENAME COLUMN filled TO filed;
+SHOW COLUMNS FROM raw_sub;
