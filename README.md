@@ -29,6 +29,7 @@ Quarters used: **2025q4, 2026q1, 2026q2, 2026q3**. The raw files are excluded fr
 | `sql/04_peers.sql` | Finds candidate companies with a `REGEXP` name search, then hard-codes the verified 12-company peer group in `peers` (keyed by SEC CIK) |
 | `sql/05_latest.sql` | View `latest_10k`: each company's most recent 10-K, picked with `ROW_NUMBER() OVER (PARTITION BY cik ORDER BY period DESC, filed DESC)` |
 | `sql/06_facts.sql` | Views `facts_long` and `facts`: pivots XBRL tags from long format (one row per number) to wide format (one row per company and date) with conditional aggregation (`MAX(CASE WHEN ...)`); `COALESCE` picks the first available tag when companies report the same item under different names |
+| `sql/07_qa.sql` | Data quality checks: counts missing fields per company (`SUM(column IS NULL)`) and lists the tags a company actually uses (`LIKE` search on `facts_long`), so missing tags can be added to `06_facts.sql` |
 
 ## Peer group
 
@@ -86,6 +87,25 @@ After cleaning (`sql/03_clean.sql`):
 |---|---:|---|
 | `sub` | 5,709 | Annual reports (10-K, 10-K/A) out of 26,703 filings |
 | `num` | 1,293,397 | USD values from those filings, excluding segment and co-registrant breakdowns (from 15,038,040 raw rows) |
+
+## Validation
+
+Spot-check of the `facts` view against the filed 10-Ks on SEC EDGAR, for the latest fiscal year ($ millions):
+
+| Company | Line item (as printed in the 10-K) | 10-K | `facts` view | Match |
+|---|---|---:|---:|:---:|
+| ADM (FY ended 2025-12-31, [10-K](https://www.sec.gov/Archives/edgar/data/7084/000000708426000011/)) | Revenues | 80,269 | 80,269 | ✓ |
+| | Net Earnings Attributable to Controlling Interests | 1,078 | 1,078 | ✓ |
+| | Total Assets | 52,389 | 52,389 | ✓ |
+| Deere (FY ended 2025-11-02, [10-K](https://www.sec.gov/Archives/edgar/data/315189/000110465925122321/)) | Net sales and revenues | 45,684 | 45,684 | ✓ |
+| | Net Income Attributable to Deere & Company | 5,027 | 5,027 | ✓ |
+| | Total Assets | 105,996 | 105,996 | ✓ |
+
+What the check showed:
+
+- **Net income is the parent's share.** The `NetIncomeLoss` tag is net income attributable to the company, not the total including non-controlling interests. For Deere the total is $4,998M and the parent's share is $5,027M; the screen uses the parent's share.
+- **SEC rounds dates to month-end.** Deere's fiscal year ended on November 2, 2025 (a 52/53-week year), but the data sets store it as `20251031`.
+- **A blank can hide a reported number.** ADM's balance sheet shows Total Shareholders' Equity of $22,740M, yet `equity` is NULL for ADM, because ADM tags it under a different element (equity including non-controlling interests). Gaps like this are mapped in `sql/07_qa.sql`.
 
 ## Data notes
 
