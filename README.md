@@ -2,7 +2,7 @@
 
 Credit screen of 12 agribusiness and food companies using SEC financial statement data and MySQL.
 
-> **Status:** In progress. Data loaded and cleaned, peer group selected, latest 10-K identified (Steps 1-5); ratio analysis next.
+> **Status:** In progress. Data loaded and cleaned, peer group selected, latest 10-K identified, financials pivoted (Steps 1-6); ratio analysis next.
 
 ## Data source
 
@@ -28,6 +28,7 @@ Quarters used: **2025q4, 2026q1, 2026q2, 2026q3**. The raw files are excluded fr
 | `sql/03_clean.sql` | Builds typed tables `sub` (10-K and 10-K/A filings only, real dates) and `num` (USD values, company-wide totals only, numbers as `DECIMAL(28,4)`), with indexes on the join keys |
 | `sql/04_peers.sql` | Finds candidate companies with a `REGEXP` name search, then hard-codes the verified 12-company peer group in `peers` (keyed by SEC CIK) |
 | `sql/05_latest.sql` | View `latest_10k`: each company's most recent 10-K, picked with `ROW_NUMBER() OVER (PARTITION BY cik ORDER BY period DESC, filed DESC)` |
+| `sql/06_facts.sql` | Views `facts_long` and `facts`: pivots XBRL tags from long format (one row per number) to wide format (one row per company and date) with conditional aggregation (`MAX(CASE WHEN ...)`); `COALESCE` picks the first available tag when companies report the same item under different names |
 
 ## Peer group
 
@@ -91,11 +92,14 @@ After cleaning (`sql/03_clean.sql`):
 - SEC `num.txt` files for 2026q2 and 2026q3 contain 34 rows (from 3 investment-fund filings) with a stray tab inside the `segments` field. MySQL truncated these rows on load (warning 1262). They stay in `raw_num` and are removed in `sql/03_clean.sql`, which keeps only rows with an empty `segments` value (company-wide totals). None belong to the companies in the screen.
 - 2025q4 `sub.txt` was accidentally loaded more than once, so `raw_sub` held duplicate filings. The duplicates were caught when adding the primary key on `adsh` to `sub` (MySQL error 1062, duplicate entry). The fix: delete that quarter (`DELETE FROM raw_sub WHERE src_quarter = '2025q4'`), reload it once, recheck the row counts against the source files, then rebuild `sub` and `num`. The primary key now guarantees one row per filing.
 
+- **Tag coverage after the first pivot (`06_facts.sql`):** for the latest fiscal year, several fields are blank because companies report them under tags not yet mapped. Blank: EBIT for ADM, BG, CTVA and DE; interest expense for CAG, CTVA, GIS, INGR and MOS; revenue for HRL and KHC; D&A for HRL and TSN; equity for ADM and CAG; net income and cash for CF; non-current long-term debt for 6 of 12; current assets and liabilities for DE (Deere does not present a classified balance sheet). These are investigated and mapped in `sql/07_qa.sql`.
+
 ## Lessons learned
 
 - **Validate every load against the source.** Comparing row counts with the files' line counts is what made the duplicate load easy to diagnose and confirm fixed.
 - **Let constraints catch errors.** The primary key on `sub` stopped duplicate data before it could double-count any figures in the ratios.
 - **Match entities by ID, not by name.** A name search is a starting point; the CIK is the reliable key. Two of the 14 name matches were the wrong companies.
+- **A typo in a filter is silent.** A misspelled XBRL tag matches nothing and returns NULL instead of an error, so every pivoted column is checked for gaps before ratios are calculated.
 - **Make loads safe to rerun.** Running `LOAD DATA` twice appends a second copy. Delete a quarter's rows (by `src_quarter`) before reloading it.
 
 ## How to reproduce
