@@ -2,7 +2,7 @@
 
 Credit screen of 12 agribusiness and food companies using SEC financial statement data and MySQL.
 
-> **Status:** In progress. Data loaded and cleaned, peer group selected, latest 10-K identified, financials pivoted (Steps 1-6); ratio analysis next.
+> **Status:** In progress. Data loaded and cleaned, peer group selected, latest 10-K identified, financials pivoted, data quality checked, ratios defined, peer screen built (Steps 1-9); tag mapping and screen fixes next, then export and credit memo.
 
 ## Data source
 
@@ -30,6 +30,8 @@ Quarters used: **2025q4, 2026q1, 2026q2, 2026q3**. The raw files are excluded fr
 | `sql/05_latest.sql` | View `latest_10k`: each company's most recent 10-K, picked with `ROW_NUMBER() OVER (PARTITION BY cik ORDER BY period DESC, filed DESC)` |
 | `sql/06_facts.sql` | Views `facts_long` and `facts`: pivots XBRL tags from long format (one row per number) to wide format (one row per company and date) with conditional aggregation (`MAX(CASE WHEN ...)`); `COALESCE` picks the first available tag when companies report the same item under different names |
 | `sql/07_qa.sql` | Data quality checks: counts missing fields per company (`SUM(column IS NULL)`) and lists the tags a company actually uses (`LIKE` search on `facts_long`), so missing tags can be added to `06_facts.sql` |
+| `sql/08_ratios.sql` | View `ratios`: a CTE (`WITH base AS ...`) derives total debt and EBITDA, then calculates eight credit ratios; `NULLIF(x, 0)` turns a zero denominator into NULL so no ratio divides by zero |
+| `sql/09_screen.sql` | View `screen`: one row per company for its latest fiscal year. `LAG()` with a named `WINDOW` gives revenue growth and the change in leverage, peer medians are calculated by hand with `ROW_NUMBER()` and `COUNT(*) OVER ()`, `RANK()` and `NTILE(4)` rank the peers, and a `CASE` expression assigns a red, amber or green credit flag |
 
 ## Peer group
 
@@ -88,6 +90,38 @@ After cleaning (`sql/03_clean.sql`):
 | `sub` | 5,709 | Annual reports (10-K, 10-K/A) out of 26,703 filings |
 | `num` | 1,293,397 | USD values from those filings, excluding segment and co-registrant breakdowns (from 15,038,040 raw rows) |
 
+## Credit ratios
+
+Defined in `sql/08_ratios.sql`, calculated for every company and fiscal year:
+
+| Ratio | Formula | What it shows |
+|---|---|---|
+| Current ratio | current assets / current liabilities | Short-term liquidity |
+| Debt / equity | total debt / equity | Balance-sheet leverage |
+| Debt / EBITDA | total debt / EBITDA | Years of earnings needed to repay debt |
+| Net debt / EBITDA | (total debt - cash) / EBITDA | The same, after using cash on hand |
+| Interest coverage | EBIT / interest expense | How easily earnings pay interest |
+| EBITDA margin | EBITDA / revenue | Operating profitability |
+| ROE | net income / equity | Return to shareholders |
+| CFO / debt | operating cash flow / total debt | Cash generation relative to debt |
+
+Total debt = non-current long-term debt + current portion of long-term debt + short-term borrowings. EBITDA = EBIT + depreciation and amortization.
+
+## Peer screen
+
+`sql/09_screen.sql` compares each company's latest fiscal year with the peer group:
+
+- **Trend:** revenue growth and the change in Debt/EBITDA versus the prior year, using `LAG()`.
+- **Peer medians** for Debt/EBITDA and interest coverage. MySQL has no `MEDIAN()` function, so the values are numbered in order and the median is the average of the middle one or two rows (`FLOOR` and `CEIL` of `(count + 1) / 2`).
+- **Rankings:** `leverage_rank` (1 = most levered) and `coverage_quartile` (1 = weakest coverage).
+- **Credit flag**, using thresholds common in bank loan covenants:
+
+| Flag | Rule |
+|---|---|
+| RED - likely covenant pressure | Debt/EBITDA above 4.0x, or interest coverage below 2.0x |
+| AMBER - watch list | Debt/EBITDA above 3.0x, or interest coverage below 4.0x |
+| GREEN - comfortable | Neither |
+
 ## Validation
 
 Spot-check of the `facts` view against the filed 10-Ks on SEC EDGAR, for the latest fiscal year ($ millions):
@@ -114,12 +148,32 @@ What the check showed:
 
 - **Tag coverage after the first pivot (`06_facts.sql`):** for the latest fiscal year, several fields are blank because companies report them under tags not yet mapped. Blank: EBIT for ADM, BG, CTVA and DE; interest expense for CAG, CTVA, GIS, INGR and MOS; revenue for HRL and KHC; D&A for HRL and TSN; equity for ADM and CAG; net income and cash for CF; non-current long-term debt for 6 of 12; current assets and liabilities for DE (Deere does not present a classified balance sheet). These are investigated and mapped in `sql/07_qa.sql`.
 
+- **Ratios are provisional until the tags are mapped.** The first run of `ratios` showed why: `total_debt` adds its parts with `COALESCE(x, 0)`, so a debt tag that is not mapped counts as zero instead of NULL. Kraft Heinz and Mosaic came out with zero debt, although their 10-Ks report $19.3B and $4.3B of long-term debt. Interest coverage, debt/EBITDA and EBITDA margin were also blank for ADM, BG, CTVA and DE, because their EBIT is not mapped yet. The tags each company actually uses were found with the `07_qa.sql` queries:
+
+  | Field | Unmapped tag found | Companies |
+  |---|---|---|
+  | revenue | `RevenueFromContractWithCustomerIncludingAssessedTax` | HRL, KHC |
+  | ebit | `IncomeLossFromContinuingOperationsBeforeIncomeTaxes...` (pre-tax income, a proxy) | ADM, BG, CTVA, DE |
+  | interest_expense | `InterestAndDebtExpense`; `InterestIncomeExpenseNet` / `...NonoperatingNet` (net, sign reversed); `FinancingCostsNet` | CTVA; CAG, MOS, GIS; INGR |
+  | d_and_a | `Depreciation` + `AdjustmentForAmortization` | HRL, TSN |
+  | net_income | `ProfitLoss` less `NetIncomeLossAttributableToNoncontrollingInterest` | CF |
+  | equity | `StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest` | ADM, CAG |
+  | cash | `CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents` | CF |
+  | ltd_noncurrent | `LongTermDebtAndCapitalLeaseObligations`; `LongTermDebtAndFinanceLeasesNoncurrent`; `SeniorLongTermNotes` | CTVA, GIS, KHC, MOS, TSN; DE; CAG |
+  | ltd_current | `LongTermDebtAndCapitalLeaseObligationsCurrent` | CAG, GIS, KHC, MOS |
+
+- **First run of the screen: two logic problems found** (the SQL ran without errors, so both were found by checking the output):
+  - **Wrong "latest year" for some companies.** A 10-K contains numbers for dates other than the fiscal year-ends, such as quarterly figures and subsequent events. Corteva's latest row was 2026-01-31, a date after its fiscal year with almost no data. For General Mills, Ingredion, Bunge and Kraft Heinz, the "prior year" used by `LAG()` was a quarter-end, so revenue growth came out blank. The fix is to keep only the fiscal year-end and the two years before it in `facts_long`: `WHERE n.ddate IN (l.period, l.period - INTERVAL 1 YEAR, l.period - INTERVAL 2 YEAR)`.
+  - **Missing data was flagged GREEN.** A comparison with NULL is neither true nor false, so a company with no Debt/EBITDA or interest coverage falls through to the `ELSE` branch. ADM, Bunge, Corteva and Deere were GREEN only because their ratios were blank. Negative EBITDA also gave a negative Debt/EBITDA that passed as low leverage (Conagra). The fix is two new branches at the top of the `CASE`: RED when EBITDA is zero or negative, and GREY (insufficient data) when either ratio is NULL.
+
 ## Lessons learned
 
 - **Validate every load against the source.** Comparing row counts with the files' line counts is what made the duplicate load easy to diagnose and confirm fixed.
 - **Let constraints catch errors.** The primary key on `sub` stopped duplicate data before it could double-count any figures in the ratios.
 - **Match entities by ID, not by name.** A name search is a starting point; the CIK is the reliable key. Two of the 14 name matches were the wrong companies.
 - **A typo in a filter is silent.** A misspelled XBRL tag matches nothing and returns NULL instead of an error, so every pivoted column is checked for gaps before ratios are calculated.
+- **Zero is not the same as unknown.** `COALESCE(x, 0)` is right for adding optional pieces of a total, but it turns a missing value into a believable wrong number (zero debt). Missing inputs should stay NULL until they are mapped.
+- **No error does not mean a correct result.** Several of the worst mistakes in this project ran without an error: a misspelled tag, a missing value counted as zero, a NULL that fell through to GREEN. Each result was checked against the source data or the filings.
 - **Make loads safe to rerun.** Running `LOAD DATA` twice appends a second copy. Delete a quarter's rows (by `src_quarter`) before reloading it.
 
 ## How to reproduce
