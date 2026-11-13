@@ -1,7 +1,8 @@
 CREATE OR REPLACE VIEW facts_long AS
 SELECT l.ticker, l.segment, n.ddate, n.tag, n.qtrs, n.value
 FROM latest_10k l
-JOIN num n ON n.adsh = l.adsh;
+JOIN num n ON n.adsh = l.adsh
+WHERE n.ddate IN (l.period, l.period - INTERVAL 1 YEAR, l.period - INTERVAL 2 YEAR);
 
 CREATE OR REPLACE VIEW facts AS
 SELECT ticker, segment, ddate AS fiscal_year_end,

@@ -38,7 +38,7 @@ SELECT l.ticker, l.segment, l.fiscal_year_end,
     CASE
 	  WHEN l.ebitda <= 0 THEN 'RED - negative EBITDA'
       WHEN l.debt_to_ebitda IS NULL OR l.interest_coverage IS NULL
-		THEN 'Grey - insufficient data'
+		THEN 'GREY - insufficient data'
 	  WHEN l.debt_to_ebitda > 4.0 OR l.interest_coverage < 2.0
 		THEN 'RED - likely covenant pressure'
 	  WHEN l.debt_to_ebitda >3.0 OR l.interest_coverage < 4.0 THEN 'AMBER - watch list'
@@ -47,11 +47,4 @@ SELECT l.ticker, l.segment, l.fiscal_year_end,
 FROM latest l
 CROSS JOIN medians m
 ORDER BY leverage_rank;
-SELECT * FROM screen;
-
-CREATE OR REPLACE VIEW facts_long AS
-SELECT l.ticker, l.segment, n.ddate, n.tag, n.qtrs, n.value
-FROM latest_10k l
-JOIN num n ON n.adsh = l.adsh
-WHERE n.ddate IN (l.period, l.period - INTERVAL 1 YEAR, l.period - INTERVAL 2 YEAR);
 SELECT * FROM screen;

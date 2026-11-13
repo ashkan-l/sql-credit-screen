@@ -2,7 +2,7 @@
 
 Credit screen of 12 agribusiness and food companies using SEC financial statement data and MySQL.
 
-> **Status:** In progress. Data loaded and cleaned, peer group selected, latest 10-K identified, financials pivoted, data quality checked, ratios defined, peer screen built (Steps 1-9); tag mapping and screen fixes next, then export and credit memo.
+> **Status:** In progress. Pipeline complete through the peer screen and CSV export (Steps 1-10). Results are provisional until the remaining XBRL tags are mapped in `06_facts.sql`; the credit memo comes after that.
 
 ## Data source
 
@@ -32,6 +32,7 @@ Quarters used: **2025q4, 2026q1, 2026q2, 2026q3**. The raw files are excluded fr
 | `sql/07_qa.sql` | Data quality checks: counts missing fields per company (`SUM(column IS NULL)`) and lists the tags a company actually uses (`LIKE` search on `facts_long`), so missing tags can be added to `06_facts.sql` |
 | `sql/08_ratios.sql` | View `ratios`: a CTE (`WITH base AS ...`) derives total debt and EBITDA, then calculates eight credit ratios; `NULLIF(x, 0)` turns a zero denominator into NULL so no ratio divides by zero |
 | `sql/09_screen.sql` | View `screen`: one row per company for its latest fiscal year. `LAG()` with a named `WINDOW` gives revenue growth and the change in leverage, peer medians are calculated by hand with `ROW_NUMBER()` and `COUNT(*) OVER ()`, `RANK()` and `NTILE(4)` rank the peers, and a `CASE` expression assigns a red, amber or green credit flag |
+| `sql/10_export.sql` | Segment summary (average leverage and coverage by segment, `GROUP BY segment`), and the queries whose results are exported to `output/` |
 
 ## Peer group
 
@@ -118,9 +119,26 @@ Total debt = non-current long-term debt + current portion of long-term debt + sh
 
 | Flag | Rule |
 |---|---|
+| RED - negative EBITDA | EBITDA is zero or negative (checked first, because a negative Debt/EBITDA would otherwise look like low leverage) |
+| GREY - insufficient data | Debt/EBITDA or interest coverage is missing |
 | RED - likely covenant pressure | Debt/EBITDA above 4.0x, or interest coverage below 2.0x |
 | AMBER - watch list | Debt/EBITDA above 3.0x, or interest coverage below 4.0x |
-| GREEN - comfortable | Neither |
+| GREEN - comfortable | None of the above |
+
+### First results (provisional)
+
+From `output/credit_screen_latest.csv`. Peer medians: Debt/EBITDA 0.44x, interest coverage 5.83x.
+
+| Ticker | Fiscal year | Revenue growth | Debt/EBITDA | Interest coverage | Flag |
+|---|---|---:|---:|---:|---|
+| HRL | 2025-10-31 | – | 3.98x | 9.21x | AMBER |
+| TSN | 2025-09-30 | 2.1% | 0.83x | 2.45x | AMBER |
+| CF | 2025-12-31 | 19.3% | 1.01x | 14.84x | GREEN |
+| KHC | 2025-12-31 | – | 0.00x | -4.93x | RED (negative EBITDA) |
+| CAG | 2026-05-31 | -2.9% | -0.03x | – | RED (negative EBITDA) |
+| INGR, GIS, MOS, ADM, BG, CTVA, DE | | | | | GREY |
+
+These are not yet a credit view. Seven of 12 companies are GREY, and the medians are pulled down by debt that is not mapped yet (Kraft Heinz and Mosaic show 0.00x). The screen updates automatically once the tags in Data notes are added to `06_facts.sql`, because every later step is a view.
 
 ## Validation
 
@@ -162,9 +180,10 @@ What the check showed:
   | ltd_noncurrent | `LongTermDebtAndCapitalLeaseObligations`; `LongTermDebtAndFinanceLeasesNoncurrent`; `SeniorLongTermNotes` | CTVA, GIS, KHC, MOS, TSN; DE; CAG |
   | ltd_current | `LongTermDebtAndCapitalLeaseObligationsCurrent` | CAG, GIS, KHC, MOS |
 
-- **First run of the screen: two logic problems found** (the SQL ran without errors, so both were found by checking the output):
-  - **Wrong "latest year" for some companies.** A 10-K contains numbers for dates other than the fiscal year-ends, such as quarterly figures and subsequent events. Corteva's latest row was 2026-01-31, a date after its fiscal year with almost no data. For General Mills, Ingredion, Bunge and Kraft Heinz, the "prior year" used by `LAG()` was a quarter-end, so revenue growth came out blank. The fix is to keep only the fiscal year-end and the two years before it in `facts_long`: `WHERE n.ddate IN (l.period, l.period - INTERVAL 1 YEAR, l.period - INTERVAL 2 YEAR)`.
-  - **Missing data was flagged GREEN.** A comparison with NULL is neither true nor false, so a company with no Debt/EBITDA or interest coverage falls through to the `ELSE` branch. ADM, Bunge, Corteva and Deere were GREEN only because their ratios were blank. Negative EBITDA also gave a negative Debt/EBITDA that passed as low leverage (Conagra). The fix is two new branches at the top of the `CASE`: RED when EBITDA is zero or negative, and GREY (insufficient data) when either ratio is NULL.
+- **First run of the screen: two logic problems found and fixed** (the SQL ran without errors, so both were found by checking the output):
+  - **Wrong "latest year" for some companies.** A 10-K contains numbers for dates other than the fiscal year-ends, such as quarterly figures and subsequent events. Corteva's latest row was 2026-01-31, a date after its fiscal year with almost no data. For General Mills, Ingredion, Bunge and Kraft Heinz, the "prior year" used by `LAG()` was a quarter-end, so revenue growth came out blank. Fixed by keeping only the fiscal year-end and the two years before it in `facts_long`: `WHERE n.ddate IN (l.period, l.period - INTERVAL 1 YEAR, l.period - INTERVAL 2 YEAR)`. `ratios` now has 36 rows (12 companies x 3 years) instead of 75, and every company's latest year matches its 10-K.
+  - **Missing data was flagged GREEN.** A comparison with NULL is neither true nor false, so a company with no Debt/EBITDA or interest coverage fell through to the `ELSE` branch. ADM, Bunge, Corteva and Deere were GREEN only because their ratios were blank, and Conagra's negative EBITDA gave a negative Debt/EBITDA that passed as low leverage. Fixed with two new branches at the top of the `CASE`: RED for EBITDA zero or below, and GREY when either ratio is missing.
+- **The oldest year is incomplete.** A 10-K shows three years of income statement but only two balance sheets, so the earliest year in `ratios` has no balance sheet values (for example, ADM 2023 shows total debt 0). Only the latest year and the change from the prior year are used in the screen.
 
 ## Lessons learned
 
@@ -182,3 +201,4 @@ What the check showed:
 2. In MySQL Workbench, create a schema `credit_screen`, enable `local_infile`, and add `OPT_LOCAL_INFILE=1` to the connection's Advanced settings.
 3. Open and run the scripts in `sql/` in numerical order. Each one runs top to bottom with Cmd+Shift+Enter.
 4. Compare your row counts with the Load validation table.
+5. Export the `screen` and `ratios` views from the result grid (Export button, CSV) to `output/credit_screen_latest.csv` and `output/ratios_all_years.csv`.
