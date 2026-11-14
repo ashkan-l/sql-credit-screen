@@ -12,7 +12,7 @@ CREATE TABLE peers (cik INT UNSIGNED PRIMARY KEY, ticker VARCHAR(10), segment VA
 INSERT INTO peers VALUES
 	(7084,		'ADM',	'Grain & processing'),
     (315189,	'DE',	'Ag equipment'),
-    (1996862,	'BG',	'Grain & Processing'),
+    (1996862,	'BG',	'Grain & processing'),
     (1755672,	'CTVA',	'Seeds & crop protection'),
     (1324404, 'CF',   'Fertilizer'),
 	(1285785, 'MOS',  'Fertilizer'),
