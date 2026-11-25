@@ -2,7 +2,7 @@
 
 A credit screen of 12 U.S. agribusiness and food companies, from fertilizer and seeds to packaged food, built in MySQL from the SEC's raw XBRL financial statement data. It loads 15 million rows of SEC data, pivots each company's latest 10-K into a financial table, calculates eight credit ratios, and flags each company red, amber or green against loan-covenant thresholds.
 
-> **Status:** SQL pipeline complete (Steps 1-10). Credit memo in progress (`memo/`).
+> **Status:** SQL pipeline complete (Steps 1-10). Credit memo completed (`memo/`).
 
 ## Key findings
 
