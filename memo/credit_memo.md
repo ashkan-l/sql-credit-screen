@@ -1,6 +1,7 @@
 # Credit Memo: Bunge Global SA (BG)
 
 **To:** Credit Committee | **From:** Ashkan Loghmani | **Date:** November 2026
+
 **Request:** Approve a $500 million, 3-year senior unsecured revolving credit commitment to Bunge Global SA, for general corporate and working capital purposes (illustrative request for this exercise).
 
 ## Recommendation
@@ -86,7 +87,7 @@ Adjusted EBITDA was about $2.46 billion in both years. Earnings held steady whil
 
 **Conditions**
 
-1. A maximum leverage covenant of 4.5x adjusted Debt/EBITDA, tested quarterly, stepping down to 3.5x by December 31, 2027.
+1. A maximum leverage covenant of 6x adjusted Debt/EBITDA, tested quarterly, stepping down to 4.5x by December 31, 2027.
 2. A minimum interest coverage covenant of 2.5x (adjusted EBIT / interest).
 3. Quarterly financial statements and a compliance certificate, plus a progress update on Viterra synergies.
 4. A full credit review in 12 months, or earlier if Bunge loses its investment-grade rating.
